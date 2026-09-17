@@ -26,6 +26,8 @@ export default function TodayView() {
   const [habits, setHabits] = useState([]);
   const [completions, setCompletions] = useState([]);
   const [momentumStreak, setMomentumStreak] = useState(0);
+  const [focusTodayMinutes, setFocusTodayMinutes] = useState(0);
+  const [focusTodaySessions, setFocusTodaySessions] = useState(0);
   const [journal, setJournal] = useState('');
   const [journalSaving, setJournalSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -40,16 +42,22 @@ export default function TodayView() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [habitsRes, compRes, streaksRes, journalRes] = await Promise.all([
+      const [habitsRes, compRes, streaksRes, journalRes, pomodoroRes] = await Promise.all([
         api.get('/habits'),
         api.get(`/completions?startDate=${today}&endDate=${today}`),
         api.get('/stats/streaks'),
         api.get(`/journal/${today}`),
+        api.get(`/pomodoro?startDate=${today}&endDate=${today}`),
       ]);
       setHabits(habitsRes.data.habits);
       setCompletions(compRes.data.completions);
       setMomentumStreak(streaksRes.data.momentumStreak);
       setJournal(journalRes.data.entry?.content || '');
+
+      // Compute today's focus stats from pomodoro sessions
+      const workSessions = (pomodoroRes.data.sessions || []).filter((s) => s.type === 'work');
+      setFocusTodaySessions(workSessions.length);
+      setFocusTodayMinutes(workSessions.reduce((sum, s) => sum + (s.duration || 0), 0));
     } catch {
       toast.error('Failed to load data');
     } finally {
@@ -283,7 +291,7 @@ export default function TodayView() {
             </div>
           </div>
 
-          {/* Focus Card (Pomodoro) */}
+          {/* Focus Card (Pomodoro) — shows real today stats */}
           <Link
             to="/timer"
             className="relative rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/40 p-5 transition-all duration-200 hover:border-[var(--color-accent)] hover:bg-[var(--color-bg)]/70 hover:shadow-xs group cursor-pointer block"
@@ -296,14 +304,25 @@ export default function TodayView() {
                 <Timer size={16} />
               </div>
             </div>
-            <div className="mt-3 flex items-center justify-between">
-              <span className="text-2xl font-bold text-[var(--color-text)]">Pomodoro</span>
+            <div className="mt-3 flex items-baseline gap-2">
+              <span className="text-3xl font-extrabold text-[var(--color-text)] tracking-tight">
+                {focusTodayMinutes}m
+              </span>
+              <span className="text-xs text-[var(--color-text-secondary)] font-medium">
+                ({focusTodaySessions} session{focusTodaySessions === 1 ? '' : 's'})
+              </span>
+            </div>
+            <div className="mt-2 text-xs text-[var(--color-accent)] font-medium flex items-center gap-1">
+              {focusTodaySessions > 0 ? (
+                <span>Today's focus time</span>
+              ) : (
+                <span>Start focus session →</span>
+              )}
               <ArrowUpRight
-                size={18}
+                size={13}
                 className="text-[var(--color-text-secondary)] group-hover:text-[var(--color-accent)] group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all"
               />
             </div>
-            <div className="mt-2 text-xs text-[var(--color-accent)] font-medium">Start focus session →</div>
           </Link>
         </div>
       </section>
