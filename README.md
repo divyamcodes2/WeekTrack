@@ -10,30 +10,32 @@ WeekTrack is a full-stack habit tracker built to help you build consistency thro
 
 ## 📁 Project Structure
 
+```
 WeekTrack/
 ├── client/
-│ ├── src/
-│ │ ├── components/ 🧩 Layout, Navbar
-│ │ ├── context/ 🔄 Auth, Theme providers
-│ │ ├── features/
-│ │ │ ├── auth/ 🔐 Login, Signup, ProtectedRoute
-│ │ │ ├── habits/ ✅ TodayView, WeekGrid, HabitForm, StreakBadge
-│ │ │ ├── pomodoro/ ⏱️ PomodoroTimer
-│ │ │ ├── settings/ ⚙️ SettingsPage
-│ │ │ └── stats/ 📊 StatsDashboard, Heatmap
-│ │ ├── services/ 🌐 Axios API client
-│ │ └── utils/ 🧰 Date helpers, constants
-│ └── vite.config.js
+│   ├── src/
+│   │   ├── components/     🧩 Layout, Navbar
+│   │   ├── context/        🔄 Auth, Theme providers
+│   │   ├── features/
+│   │   │   ├── auth/       🔐 Login, Signup, ProtectedRoute
+│   │   │   ├── habits/     ✅ TodayView, WeekGrid, HabitForm, StreakBadge
+│   │   │   ├── pomodoro/   ⏱️ PomodoroTimer
+│   │   │   ├── settings/   ⚙️ SettingsPage
+│   │   │   └── stats/      📊 StatsDashboard, Heatmap
+│   │   ├── services/       🌐 Axios API client
+│   │   └── utils/          🧰 Date helpers, constants
+│   └── vite.config.js
 ├── server/
-│ ├── config/ 🗄️ DB connection
-│ ├── controllers/ 🎮 Auth, Habit, Completion, Pomodoro, Stats, Journal, Export
-│ ├── middleware/ 🛡️ Auth JWT, error handler, validation
-│ ├── models/ 🍃 User, Habit, Completion, PomodoroSession, JournalEntry
-│ ├── routes/ 🛣️ Express route definitions
-│ ├── scripts/ 🌱 Seed script
-│ ├── utils/ 🧮 Streak calculator, date helpers
-│ └── server.js
-└── README.md 📄 You are here
+│   ├── config/              🗄️ DB connection
+│   ├── controllers/        🎮 Auth, Habit, Completion, Pomodoro, Stats, Journal, Export
+│   ├── middleware/         🛡️ Auth JWT, error handler, validation
+│   ├── models/              🍃 User, Habit, Completion, PomodoroSession, JournalEntry
+│   ├── routes/              🛣️ Express route definitions
+│   ├── scripts/             🌱 Seed script
+│   ├── utils/                🧮 Streak calculator, date helpers
+│   └── server.js
+└── README.md                📄 You are here
+```
 
 
 ## 🚀 Getting Started (Local Setup)
