@@ -14,14 +14,28 @@ const statsRoutes = require('./routes/stats');
 const journalRoutes = require('./routes/journal');
 const exportRoutes = require('./routes/export');
 const historyRoutes = require('./routes/history');
+const insightsRoutes = require('./routes/insights');
 
 const app = express();
 
 // ─── Middleware ───────────────────────────────────────────
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true,
-}));
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map((url) => url.trim())
+  : ['http://localhost:5173'];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS origin not allowed: ${origin}`));
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(cookieParser());
 
@@ -34,6 +48,7 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/journal', journalRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/history', historyRoutes);
+app.use('/api/insights', insightsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

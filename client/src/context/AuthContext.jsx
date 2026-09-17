@@ -10,6 +10,12 @@ export function AuthProvider({ children }) {
   // Check if user is logged in on mount
   useEffect(() => {
     checkAuth();
+
+    const handleUnauthorized = () => {
+      setUser(null);
+    };
+    window.addEventListener('auth:unauthorized', handleUnauthorized);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
   }, []);
 
   const checkAuth = async () => {

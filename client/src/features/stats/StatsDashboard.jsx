@@ -7,6 +7,7 @@ import { Flame, Trophy, TrendingUp, Clock, Target } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
 import Heatmap from './Heatmap';
+import InsightsPanel from './InsightsPanel';
 
 export default function StatsDashboard() {
   const [overview, setOverview] = useState(null);
@@ -61,6 +62,9 @@ export default function StatsDashboard() {
   return (
     <div className="animate-fade-in space-y-6">
       <h1 className="text-2xl font-bold">Statistics</h1>
+
+      {/* AI Habit Insights */}
+      <InsightsPanel />
 
       {/* Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

@@ -12,8 +12,10 @@ const completionSchema = new mongoose.Schema(
       ref: 'Habit',
       required: true,
     },
+    // The calendar date this habit completion is FOR (tracked day, 'YYYY-MM-DD').
+    // Distinct from record write timestamps: do not use createdAt/updatedAt for calendar calculations.
     date: {
-      type: String, // Stored as 'YYYY-MM-DD' for easy querying
+      type: String,
       required: true,
     },
     isFreezeDay: {
@@ -21,6 +23,8 @@ const completionSchema = new mongoose.Schema(
       default: false,
     },
   },
+  // Record write timestamps: createdAt reflects the real-time moment the user clicked check.
+  // Used strictly for real-time check-in diagnostics (e.g. same-day Best Time of Day).
   { timestamps: true }
 );
 

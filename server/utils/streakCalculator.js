@@ -66,16 +66,13 @@ async function calculateStreaks(habitId, userId, frequency) {
     checkDate = subtractDays(today, i);
 
     if (frequency.type === 'x_per_week') {
-      // For weekly frequency, check per-week
-      const weekStart = getWeekStart(checkDate);
-      if (weekQuotaMet(weekStart)) {
+      // For weekly frequency, check consecutive days or weekly quotas
+      if (completedDates.has(checkDate) || freezeDates.has(checkDate)) {
         tempStreak++;
-        // Skip to the start of this week
-        const weekStartDate = new Date(weekStart + 'T00:00:00');
-        const todayDate = new Date(today + 'T00:00:00');
-        i = Math.floor((todayDate - weekStartDate) / 86400000) + 7 - 1;
-      } else if (i > 0) {
-        // Don't break on current (possibly incomplete) week
+      } else if (checkDate === today) {
+        // Today not yet completed, skip
+        continue;
+      } else {
         if (!streakBroken) {
           currentStreak = tempStreak;
           streakBroken = true;
@@ -113,6 +110,12 @@ async function calculateStreaks(habitId, userId, frequency) {
     currentStreak = tempStreak;
   }
   longestStreak = Math.max(longestStreak, tempStreak);
+
+  // Guarantee: if today was completed, currentStreak must be at least 1
+  if (completedDates.has(today) && currentStreak === 0) {
+    currentStreak = 1;
+    longestStreak = Math.max(longestStreak, 1);
+  }
 
   return { currentStreak, longestStreak };
 }

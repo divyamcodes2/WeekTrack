@@ -12,6 +12,7 @@ import {
   LogOut,
   CheckCircle2,
   History,
+  Sparkles,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { to: '/week', icon: CalendarDays, label: 'Week' },
   { to: '/stats', icon: BarChart3, label: 'Stats' },
   { to: '/history', icon: History, label: 'History' },
+  { to: '/insights', icon: Sparkles, label: 'Insights' },
   { to: '/timer', icon: Timer, label: 'Timer' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ];

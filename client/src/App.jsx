@@ -11,6 +11,7 @@ import WeekGrid from './features/habits/WeekGrid';
 import StatsDashboard from './features/stats/StatsDashboard';
 import PomodoroTimer from './features/pomodoro/PomodoroTimer';
 import HistoryPage from './features/history/HistoryPage';
+import InsightsPage from './features/insights/InsightsPage';
 import SettingsPage from './features/settings/SettingsPage';
 
 export default function App() {
@@ -51,6 +52,7 @@ export default function App() {
               <Route path="/week" element={<WeekGrid />} />
               <Route path="/stats" element={<StatsDashboard />} />
               <Route path="/history" element={<HistoryPage />} />
+              <Route path="/insights" element={<InsightsPage />} />
               <Route path="/timer" element={<PomodoroTimer />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>

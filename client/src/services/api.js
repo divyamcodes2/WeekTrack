@@ -23,8 +23,8 @@ api.interceptors.response.use(
 
     // Don't redirect on auth check failures (silent checks)
     if (error.response?.status === 401 && !error.config._silentAuth) {
-      // Could trigger a logout here if needed
       console.warn('Auth error:', message);
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
     }
 
     return Promise.reject(error);
