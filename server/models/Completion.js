@@ -32,5 +32,7 @@ const completionSchema = new mongoose.Schema(
 completionSchema.index({ userId: 1, habitId: 1, date: 1 }, { unique: true });
 // Index for date range queries
 completionSchema.index({ userId: 1, date: 1 });
+// Index for habit streak lookups across dates
+completionSchema.index({ userId: 1, habitId: 1 });
 
 module.exports = mongoose.model('Completion', completionSchema);

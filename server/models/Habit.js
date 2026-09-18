@@ -82,8 +82,11 @@ const habitSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Compound index for fast user habit lookups
+// Compound indexes for fast user habit lookups and sorting
 habitSchema.index({ userId: 1, isArchived: 1 });
+habitSchema.index({ userId: 1, isArchived: 1, createdAt: -1 });
+habitSchema.index({ userId: 1, createdAt: -1 });
+habitSchema.index({ userId: 1, updatedAt: -1 });
 
 // Static: expose HABIT_COLORS for API
 habitSchema.statics.HABIT_COLORS = HABIT_COLORS;

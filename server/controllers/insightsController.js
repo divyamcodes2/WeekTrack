@@ -1,43 +1,58 @@
 const Habit = require('../models/Habit');
 const Completion = require('../models/Completion');
 const HabitInsight = require('../models/HabitInsight');
+const User = require('../models/User');
 const { calculateHabitRisk } = require('../utils/insightCalculator');
 const { getToday, getWeekStart, subtractDays, addDays, getDateRange, getDayOfWeek, formatDate } = require('../utils/dateHelpers');
+const { isEncryptionConfigured, decryptApiKey } = require('../utils/crypto');
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
  * Call Gemini API with automatic retry and JSON parsing.
  */
-async function callGeminiForInsight(prompt, habitId, habitName, retry = true) {
+async function callGeminiForInsight(prompt, habitId, habitName, apiKey) {
   const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-  if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.includes('your_gemini_api_key_here')) {
-    const err = new Error('GEMINI_API_KEY is not configured in server/.env');
-    console.error('[AI Coach]', err.message);
+  if (!apiKey || apiKey.trim().length === 0) {
+    const err = new Error('No Gemini API key provided');
+    err.code = 'NO_API_KEY';
     throw err;
   }
 
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const CANDIDATE_MODELS = ['gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-3.5-flash-lite', 'gemini-3.6-flash'];
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const CANDIDATE_MODELS = [
+    'gemini-3.5-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-3.1-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-3.6-flash',
+  ];
 
   let lastErr = null;
   for (const modelName of CANDIDATE_MODELS) {
     try {
       console.log(`[AI Coach] Calling Gemini (${modelName}) for habit "${habitName}" (${habitId})...`);
-      const model = genAI.getGenerativeModel({
-        model: modelName,
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.3,
+      const model = genAI.getGenerativeModel(
+        {
+          model: modelName,
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.3,
+          },
         },
-      });
+        { timeout: 8000 }
+      );
 
       const result = await model.generateContent(prompt);
       const text = result.response.text();
       console.log(`[AI Coach] Gemini response received for "${habitName}":`, text);
 
-      const data = JSON.parse(text);
+      let cleanedText = text.trim();
+      if (cleanedText.startsWith('```')) {
+        cleanedText = cleanedText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      }
+      const data = JSON.parse(cleanedText);
 
       if (!data.riskSummary || !data.suggestion) {
         throw new Error('Gemini response missing riskSummary or suggestion fields');
@@ -60,6 +75,13 @@ async function callGeminiForInsight(prompt, habitId, habitName, retry = true) {
       };
     } catch (err) {
       lastErr = err;
+      // Detect invalid API key errors from Gemini (HTTP 400/401/403)
+      const status = err?.status || err?.response?.status || err?.httpStatusCode;
+      if (status === 400 || status === 401 || status === 403 || /api.key/i.test(err.message)) {
+        const keyErr = new Error('Invalid or rejected Gemini API key');
+        keyErr.code = 'INVALID_KEY';
+        throw keyErr;
+      }
       console.warn(`[AI Coach] Gemini model ${modelName} returned error for "${habitName}":`, err.message);
     }
   }
@@ -77,6 +99,39 @@ function buildPrompt(habit, riskData) {
   const w2 = p.slice(14, 21).map((d) => (d.completed ? '✓' : '✗')).join(' ');
   const w3 = p.slice(7, 14).map((d) => (d.completed ? '✓' : '✗')).join(' ');
   const w4 = p.slice(0, 7).map((d) => (d.completed ? '✓' : '✗')).join(' ');
+
+  if (riskData.isSingleMiss) {
+    return `You are an encouraging, expert habit coach for WeekTrack. The user has been doing relatively well with their habit "${habit.name}", but recently missed JUST A SINGLE DAY.
+
+HABIT DETAILS:
+- Habit Name: "${habit.name}"
+- Category: "${habit.category || 'General'}"
+- Current Schedule: ${riskData.frequencyDesc}
+- Performance: Completed ${riskData.thisWeekCompleted} of ${riskData.targetCount} days this week (${riskData.thisWeekRate}%).
+
+4-Week Daily Completion Pattern (✓ = done, ✗ = missed, Mon-Sun):
+- Current week:  ${w1}
+- 1 week ago:    ${w2}
+- 2 weeks ago:   ${w3}
+- 3 weeks ago:   ${w4}
+
+COACHING OBJECTIVE (GENTLE MOMENTUM NUDGE):
+- The user is NOT failing and does NOT need their schedule reduced. They missed just ONE day.
+- Acknowledge their recent consistency positively.
+- Educate them on the power of compounding gains: Explain that skipping even a single day can interrupt habit momentum and reduce progress (the "never miss twice" principle).
+- Motivate them to bounce back today so a single slip doesn't become a broken streak.
+- DO NOT suggest decreasing their frequency or lowering targets. Set "suggestedChange": null.
+
+INSTRUCTIONS:
+Respond with ONLY a strict JSON object with these exact keys:
+{
+  "habitId": "${habit._id}",
+  "riskSummary": "one positive sentence acknowledging their strong consistency while noting the single missed day (e.g., 'You have great momentum with 4 sessions this week, but missed yesterday's workout.')",
+  "suggestion": "one inspiring sentence explaining that skipping even one day chips away at compounding gains and encouraging them to get right back on track today (e.g., 'Consistency compounds: skipping just one day can stall your momentum and reduce your hard-earned gains. Recommit today—never miss twice!')",
+  "suggestedChange": null
+}
+`;
+  }
 
   return `You are an encouraging, expert habit coach for WeekTrack. Analyze this declining habit and provide a supportive, concrete, actionable suggestion to get back on track.
 
@@ -219,16 +274,33 @@ function computeRealStreaks(habit, completions) {
  */
 exports.getInsights = async (req, res, next) => {
   try {
-    const userId = req.user._id;
-    const forceFresh = req.forceFresh || req.query.force === 'true';
+    const userId = req.user._id || req.user.id;
+    const forceFresh = req.forceFresh || req.query?.force === 'true';
 
-    // Verify GEMINI_API_KEY
-    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.includes('your_gemini_api_key_here')) {
-      console.error('[AI Coach] GEMINI_API_KEY is missing or unconfigured in server/.env!');
+    // Fetch the user's encrypted Gemini API key and decrypt in-memory
+    let userApiKey = null;
+    if (isEncryptionConfigured()) {
+      const userWithKey = await User.findById(userId).select('+geminiApiKeyEncrypted');
+      if (userWithKey?.geminiApiKeyEncrypted) {
+        try {
+          userApiKey = decryptApiKey(userWithKey.geminiApiKeyEncrypted);
+        } catch (decryptErr) {
+          console.error('[Security] Failed to decrypt user Gemini API key');
+          return res.json({
+            available: false,
+            status: 'error',
+            message: 'AI insights are temporarily unavailable. Please try again later.',
+            insights: [],
+          });
+        }
+      }
+    }
+
+    if (!userApiKey) {
       return res.json({
         available: false,
-        message: 'AI Coach unavailable: GEMINI_API_KEY is not configured in server/.env',
-        error: 'API_KEY_MISSING',
+        status: 'no_api_key',
+        message: 'Add your Gemini API key in Settings to unlock AI-powered coaching.',
         insights: [],
       });
     }
@@ -248,34 +320,13 @@ exports.getInsights = async (req, res, next) => {
     let lastGeminiError = null;
 
     for (const habit of habits) {
-      let cached = null;
-      if (!forceFresh) {
-        cached = await HabitInsight.findOne({ userId, habitId: habit._id });
-        if (cached && now - new Date(cached.analyzedAt).getTime() < CACHE_TTL_MS) {
-          if (cached.isAtRisk && !cached.dismissed) {
-            results.push({
-              id: cached._id,
-              habitId: habit._id,
-              habitName: habit.name,
-              habitColor: habit.color,
-              category: habit.category,
-              currentFrequency: habit.frequency,
-              riskSummary: cached.riskSummary,
-              suggestion: cached.suggestion,
-              suggestedChange: cached.suggestedChange,
-              analyzedAt: cached.analyzedAt,
-              dismissed: cached.dismissed,
-            });
-          }
-          continue;
-        }
-      }
-
-      // Calculate risk
+      // 1. ALWAYS calculate real-time habit risk first based on actual completions
       const riskData = await calculateHabitRisk(habit, userId);
+      const cached = await HabitInsight.findOne({ userId, habitId: habit._id });
 
       if (!riskData.isAtRisk) {
-        if (cached) {
+        // Habit is currently healthy and not at risk! Clear any stale at-risk flag
+        if (cached && (cached.isAtRisk || !cached.dismissed)) {
           cached.isAtRisk = false;
           cached.analyzedAt = new Date();
           await cached.save();
@@ -283,11 +334,42 @@ exports.getInsights = async (req, res, next) => {
         continue;
       }
 
-      // Habit IS at risk -> call Gemini
+      // Habit IS at risk -> check if we have a recent (within 24h) cached AI suggestion of matching riskType
       atRiskCount++;
+
+      if (
+        !forceFresh &&
+        cached &&
+        cached.isAtRisk &&
+        !cached.dismissed &&
+        cached.riskType === riskData.riskType &&
+        cached.completionsCount === riskData.thisWeekCompleted
+      ) {
+        const ageMs = now - new Date(cached.analyzedAt).getTime();
+        if (ageMs < CACHE_TTL_MS) {
+          console.log(`[AI Coach] Using cached insight for at-risk habit "${habit.name}" (${habit._id}) [type: ${cached.riskType}, completed: ${cached.completionsCount}]`);
+          results.push({
+            id: cached._id,
+            habitId: habit._id,
+            habitName: habit.name,
+            habitColor: habit.color,
+            category: habit.category,
+            currentFrequency: habit.frequency,
+            riskSummary: cached.riskSummary,
+            suggestion: cached.suggestion,
+            suggestedChange: cached.suggestedChange,
+            riskType: cached.riskType || riskData.riskType || 'attention',
+            analyzedAt: cached.analyzedAt,
+            dismissed: cached.dismissed,
+          });
+          continue;
+        }
+      }
+
+      // Fresh Gemini evaluation needed
       try {
         const prompt = buildPrompt(habit, riskData);
-        const aiResponse = await callGeminiForInsight(prompt, habit._id, habit.name);
+        const aiResponse = await callGeminiForInsight(prompt, habit._id, habit.name, userApiKey);
 
         // Update or insert into HabitInsight cache
         const saved = await HabitInsight.findOneAndUpdate(
@@ -299,6 +381,8 @@ exports.getInsights = async (req, res, next) => {
             suggestion: aiResponse.suggestion,
             suggestedChange: aiResponse.suggestedChange,
             isAtRisk: true,
+            riskType: riskData.riskType,
+            completionsCount: riskData.thisWeekCompleted,
             analyzedAt: new Date(),
             dismissed: false,
           },
@@ -315,12 +399,24 @@ exports.getInsights = async (req, res, next) => {
           riskSummary: saved.riskSummary,
           suggestion: saved.suggestion,
           suggestedChange: saved.suggestedChange,
+          riskType: saved.riskType || riskData.riskType || 'attention',
           analyzedAt: saved.analyzedAt,
           dismissed: saved.dismissed,
         });
       } catch (geminiErr) {
+        // If the key is invalid, stop immediately — no point trying more habits
+        if (geminiErr.code === 'INVALID_KEY') {
+          console.error('[AI Coach] User\'s Gemini API key was rejected.');
+          return res.json({
+            available: false,
+            status: 'invalid_key',
+            message: 'Your Gemini API key seems invalid — please check it in Settings.',
+            insights: [],
+          });
+        }
+
         lastGeminiError = geminiErr.message;
-        console.error(`[AI Coach] Failed to generate insight for habit "${habit.name}":`, geminiErr);
+        console.error(`[AI Coach] Failed to generate insight for habit "${habit.name}":`, geminiErr.message);
         // Fallback to cached if available
         if (cached && cached.isAtRisk && !cached.dismissed) {
           results.push({
@@ -345,8 +441,8 @@ exports.getInsights = async (req, res, next) => {
       console.error('[AI Coach] All Gemini calls failed for at-risk habits:', lastGeminiError);
       return res.json({
         available: false,
-        message: `AI Coach error: ${lastGeminiError}`,
-        error: lastGeminiError,
+        status: 'error',
+        message: 'AI insights are temporarily unavailable. Please try again later.',
         insights: [],
       });
     }
@@ -360,8 +456,8 @@ exports.getInsights = async (req, res, next) => {
     console.error('[AI Coach] getInsights error:', error);
     return res.json({
       available: false,
-      message: `Failed to generate habit insights: ${error.message}`,
-      error: error.message,
+      status: 'error',
+      message: 'AI insights are temporarily unavailable. Please try again later.',
       insights: [],
     });
   }
@@ -373,7 +469,7 @@ exports.getInsights = async (req, res, next) => {
  */
 exports.refreshInsights = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id || req.user.id;
     console.log(`[AI Coach] Refresh requested for user ${userId}. Deleting cache and forcing fresh Gemini evaluation...`);
 
     // Reset all cached insights for this user
@@ -393,7 +489,7 @@ exports.refreshInsights = async (req, res, next) => {
  */
 exports.dismissInsight = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id || req.user.id;
     const { habitId } = req.params;
 
     const updated = await HabitInsight.findOneAndUpdate(
@@ -409,6 +505,22 @@ exports.dismissInsight = async (req, res, next) => {
   }
 };
 
+// In-memory cache for computationally expensive non-AI insight metrics (Sections 2-6)
+// Scoped strictly per-user, 1-hour TTL, invalidated when user updates habits or completions
+const metricsCache = new Map();
+const METRICS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Invalidate cached insight metrics for a specific user.
+ * Called on completion toggles, freeze applications, or habit modifications.
+ */
+function invalidateMetricsCache(userId) {
+  if (userId) {
+    metricsCache.delete(String(userId));
+  }
+}
+exports.invalidateMetricsCache = invalidateMetricsCache;
+
 /**
  * GET /api/insights/metrics
  * Pure computation metrics for Sections 2-6 of the Insights Page.
@@ -416,20 +528,37 @@ exports.dismissInsight = async (req, res, next) => {
  */
 exports.getInsightsMetrics = async (req, res, next) => {
   try {
-    const userId = req.user._id;
+    const userId = req.user._id || req.user.id;
+    const cacheKey = String(userId);
+    const forceFresh = req.query?.force === 'true';
+
+    // Check user-scoped metrics cache (1 hour TTL) unless forceFresh requested
+    if (!forceFresh && metricsCache.has(cacheKey)) {
+      const cached = metricsCache.get(cacheKey);
+      if (Date.now() < cached.expiresAt) {
+        return res.json(cached.data);
+      }
+      metricsCache.delete(cacheKey);
+    }
+
     const today = getToday();
 
     // 1. Fetch active habits for this user
     const habits = await Habit.find({ userId, isArchived: false }).lean();
     if (!habits || habits.length === 0) {
-      return res.json({
+      const emptyPayload = {
         hasData: false,
         weekComparison: { habits: [], overall: { thisWeekRate: 0, lastWeekRate: 0, diff: 0, trend: 'neutral' } },
         performers: { best: null, worst: null },
         timeOfDay: { buckets: [], bestBucket: null },
         streaks: [],
         consistency: { activeDaysLast30: 0, totalDays: 30, percentage: 0, headline: "You've completed at least one habit on 0 of the last 30 days" },
+      };
+      metricsCache.set(cacheKey, {
+        data: emptyPayload,
+        expiresAt: Date.now() + METRICS_CACHE_TTL,
       });
+      return res.json(emptyPayload);
     }
 
     const activeHabitIds = new Set(habits.map((h) => String(h._id)));
@@ -618,7 +747,7 @@ exports.getInsightsMetrics = async (req, res, next) => {
     const consistencyPercentage = Math.round((activeDaysLast30 / 30) * 100);
     const headline = `You've completed at least one habit on ${activeDaysLast30} of the last 30 days`;
 
-    return res.json({
+    const responsePayload = {
       hasData: true,
       weekComparison: {
         habits: habitComparisons,
@@ -644,7 +773,15 @@ exports.getInsightsMetrics = async (req, res, next) => {
         percentage: consistencyPercentage,
         headline,
       },
+    };
+
+    // Cache metrics for 1 hour for this user
+    metricsCache.set(cacheKey, {
+      data: responsePayload,
+      expiresAt: Date.now() + METRICS_CACHE_TTL,
     });
+
+    return res.json(responsePayload);
   } catch (error) {
     console.error('[AI Coach] getInsightsMetrics error:', error);
     return res.status(500).json({ message: 'Failed to compute insight metrics', error: error.message });

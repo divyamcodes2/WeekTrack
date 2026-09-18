@@ -40,6 +40,14 @@ const habitInsightSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    riskType: {
+      type: String,
+      enum: ['nudge', 'attention'],
+      default: 'attention',
+    },
+    completionsCount: {
+      type: Number,
+    },
     analyzedAt: {
       type: Date,
       default: Date.now,
@@ -54,5 +62,6 @@ const habitInsightSchema = new mongoose.Schema(
 
 // Compound index: one cached insight per habit per user
 habitInsightSchema.index({ userId: 1, habitId: 1 }, { unique: true });
+habitInsightSchema.index({ userId: 1, analyzedAt: -1 });
 
 module.exports = mongoose.model('HabitInsight', habitInsightSchema);

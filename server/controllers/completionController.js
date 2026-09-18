@@ -2,6 +2,7 @@ const Completion = require('../models/Completion');
 const Habit = require('../models/Habit');
 const { calculateStreaks } = require('../utils/streakCalculator');
 const { getWeekStart, formatDate } = require('../utils/dateHelpers');
+const { invalidateMetricsCache } = require('./insightsController');
 
 /**
  * POST /api/completions
@@ -57,6 +58,9 @@ exports.toggleCompletion = async (req, res, next) => {
     habit.currentStreak = currentStreak;
     habit.longestStreak = longestStreak;
     await habit.save();
+
+    // Invalidate user-scoped insights metrics cache so data stays immediately in sync
+    invalidateMetricsCache(req.user._id);
 
     res.json({
       action,
@@ -157,6 +161,9 @@ exports.applyFreeze = async (req, res, next) => {
     habit.currentStreak = currentStreak;
     habit.longestStreak = longestStreak;
     await habit.save();
+
+    // Invalidate user-scoped insights metrics cache so data stays immediately in sync
+    invalidateMetricsCache(req.user._id);
 
     res.json({
       message: 'Streak freeze applied',

@@ -23,6 +23,14 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
       select: false, // Don't return password by default
     },
+    geminiApiKeyEncrypted: {
+      type: String,
+      select: false, // Don't return encrypted API key by default
+    },
+    geminiApiKeyLast4: {
+      type: String,
+      default: null,
+    },
     settings: {
       streakThreshold: { type: Number, default: 20 }, // Hour (0-23) — default 8 PM
       darkMode: { type: Boolean, default: false },

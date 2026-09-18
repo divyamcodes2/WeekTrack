@@ -1,4 +1,5 @@
 const Habit = require('../models/Habit');
+const { invalidateMetricsCache } = require('./insightsController');
 
 /**
  * GET /api/habits
@@ -76,6 +77,8 @@ exports.createHabit = async (req, res, next) => {
       color,
       pomodorosRequired,
     });
+
+    invalidateMetricsCache(req.user._id);
     res.status(201).json({ habit });
   } catch (error) {
     next(error);
@@ -98,6 +101,8 @@ exports.updateHabit = async (req, res, next) => {
     if (!habit) {
       return res.status(404).json({ message: 'Habit not found' });
     }
+
+    invalidateMetricsCache(req.user._id);
     res.json({ habit });
   } catch (error) {
     next(error);
@@ -119,6 +124,8 @@ exports.toggleArchive = async (req, res, next) => {
     }
     habit.isArchived = !habit.isArchived;
     await habit.save();
+
+    invalidateMetricsCache(req.user._id);
     res.json({ habit });
   } catch (error) {
     next(error);

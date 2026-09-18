@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Sparkles,
   TrendingUp,
@@ -17,6 +18,7 @@ import {
   Check,
   X,
   Info,
+  Settings,
 } from 'lucide-react';
 import api from '../../services/api';
 import toast from 'react-hot-toast';
@@ -35,6 +37,8 @@ export default function InsightsPage() {
   const [aiMessage, setAiMessage] = useState('');
   const [dismissedAiIds, setDismissedAiIds] = useState(new Set());
   const [applyingHabitId, setApplyingHabitId] = useState(null);
+  const [aiStatus, setAiStatus] = useState(''); // '', 'no_api_key', 'invalid_key', 'error'
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Load pure computation metrics instantly
@@ -64,16 +68,21 @@ export default function InsightsPage() {
       const res = await api.get('/insights');
       if (res.data.available === false) {
         setAiAvailable(false);
+        setAiStatus(res.data.status || '');
         setAiMessage(res.data.message || 'Insights unavailable right now');
         setAiInsights([]);
       } else {
         setAiAvailable(true);
+        setAiStatus('');
         setAiInsights(res.data.insights || []);
       }
     } catch (err) {
       console.warn('AI coach fetch failed:', err.message);
       setAiAvailable(false);
-      setAiMessage('Insights unavailable right now');
+      setAiStatus('error');
+      setAiMessage(
+        err.response?.data?.message || 'AI insights are temporarily unavailable. Please try again later.'
+      );
     } finally {
       setAiLoading(false);
     }
@@ -86,17 +95,20 @@ export default function InsightsPage() {
       const res = await api.post('/insights/refresh');
       if (res.data.available === false) {
         setAiAvailable(false);
+        setAiStatus(res.data.status || '');
         setAiMessage(res.data.message || 'Insights unavailable right now');
         setAiInsights([]);
       } else {
         setAiAvailable(true);
+        setAiStatus('');
         setAiInsights(res.data.insights || []);
         setDismissedAiIds(new Set());
         toast.success('AI Coach insights refreshed');
       }
     } catch (err) {
       console.warn('Refresh failed:', err.message);
-      toast.error('Could not refresh AI insights');
+      const msg = err.response?.data?.message || 'Could not refresh AI insights';
+      toast.error(msg);
     } finally {
       setAiRefreshing(false);
     }
@@ -212,20 +224,58 @@ export default function InsightsPage() {
             <div className="h-24 animate-shimmer rounded-[var(--radius-md)]" />
           </div>
         ) : !aiAvailable ? (
-          /* Graceful degradation if Gemini key is missing or API failed */
-          <div className="bg-[var(--color-bg)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]">
-            <div className="flex items-center gap-2">
-              <Info size={15} className="shrink-0 text-[var(--color-text-secondary)]" />
-              <span>{aiMessage || 'Insights unavailable right now'}</span>
+          /* Graceful degradation based on status */
+          aiStatus === 'no_api_key' ? (
+            <div className="bg-[var(--color-bg)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 flex flex-col items-center text-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-[var(--color-primary-light)] text-[var(--color-primary)] flex items-center justify-center">
+                <Sparkles size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-[var(--color-text)] mb-1">
+                  Add your Gemini API key to unlock AI-powered coaching
+                </p>
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                  Get personalized insights and actionable suggestions for your declining habits.
+                </p>
+              </div>
+              <button
+                onClick={() => navigate('/settings')}
+                className="inline-flex items-center gap-1.5 text-xs font-medium px-4 py-2 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer"
+              >
+                <Settings size={13} />
+                Go to Settings
+              </button>
             </div>
-            <button
-              onClick={handleRefreshAiCoach}
-              disabled={aiRefreshing}
-              className="text-[var(--color-primary)] font-medium hover:underline cursor-pointer"
-            >
-              Retry
-            </button>
-          </div>
+          ) : aiStatus === 'invalid_key' ? (
+            <div className="bg-[var(--color-bg)] rounded-[var(--radius-md)] border border-[var(--color-warning)]/30 p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 text-xs">
+                <AlertTriangle size={15} className="shrink-0 text-[var(--color-warning)]" />
+                <span className="text-[var(--color-text)]">
+                  Your Gemini API key seems invalid — please check it in Settings.
+                </span>
+              </div>
+              <button
+                onClick={() => navigate('/settings')}
+                className="text-[var(--color-primary)] text-xs font-medium hover:underline cursor-pointer whitespace-nowrap"
+              >
+                Open Settings
+              </button>
+            </div>
+          ) : (
+            <div className="bg-[var(--color-bg)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-4 flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]">
+              <div className="flex items-center gap-2">
+                <Info size={15} className="shrink-0 text-[var(--color-text-secondary)]" />
+                <span>AI insights are temporarily unavailable. Please try again later.</span>
+              </div>
+              <button
+                onClick={handleRefreshAiCoach}
+                disabled={aiRefreshing}
+                className="text-[var(--color-primary)] font-medium hover:underline cursor-pointer"
+              >
+                Retry
+              </button>
+            </div>
+          )
         ) : visibleAiInsights.length === 0 ? (
           /* Positive empty state */
           <div className="bg-[var(--color-bg)] rounded-[var(--radius-md)] border border-[var(--color-border)] p-5 flex items-center gap-3.5">
@@ -244,77 +294,100 @@ export default function InsightsPage() {
         ) : (
           /* At-Risk Cards Grid */
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-            {visibleAiInsights.map((insight) => (
-              <div
-                key={insight.habitId}
-                className="bg-[var(--color-surface)] rounded-[var(--radius-lg)] border-l-4 border-l-[var(--color-warning)] border border-[var(--color-border)] p-4 shadow-sm flex flex-col justify-between space-y-3 transition-all hover:shadow-md"
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ backgroundColor: insight.habitColor || 'var(--color-primary)' }}
-                    />
-                    <span className="text-sm font-semibold text-[var(--color-text)] truncate">
-                      {insight.habitName}
-                    </span>
-                    <span className="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-[var(--color-warning-light)] text-[var(--color-warning)]">
-                      Needs Attention
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDismissAiInsight(insight.habitId)}
-                    className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)] transition-colors cursor-pointer"
-                    title="Dismiss"
-                    aria-label="Dismiss"
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-
-                {/* Risk summary */}
-                <div className="flex items-start gap-2 text-xs text-[var(--color-text-secondary)]">
-                  <AlertTriangle size={14} className="text-[var(--color-warning)] shrink-0 mt-0.5" />
-                  <p>{insight.riskSummary}</p>
-                </div>
-
-                {/* Concrete suggestion callout */}
-                <div className="bg-[var(--color-warning-light)] rounded-[var(--radius-md)] p-3 border border-[var(--color-warning)]/20 text-xs text-[var(--color-text)] leading-relaxed">
-                  <p className="font-semibold text-[var(--color-text)] mb-0.5">Recommended Adjustment:</p>
-                  <p>{insight.suggestion}</p>
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center justify-end gap-2 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => handleDismissAiInsight(insight.habitId)}
-                    className="text-xs px-3 py-1.5 rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors cursor-pointer"
-                  >
-                    Dismiss
-                  </button>
-                  {insight.suggestedChange && (
+            {visibleAiInsights.map((insight) => {
+              const isNudge = insight.riskType === 'nudge';
+              return (
+                <div
+                  key={insight.habitId}
+                  className={`bg-[var(--color-surface)] rounded-[var(--radius-lg)] border-l-4 ${
+                    isNudge ? 'border-l-[var(--color-primary)]' : 'border-l-[var(--color-warning)]'
+                  } border border-[var(--color-border)] p-4 shadow-sm flex flex-col justify-between space-y-3 transition-all hover:shadow-md`}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: insight.habitColor || 'var(--color-primary)' }}
+                      />
+                      <span className="text-sm font-semibold text-[var(--color-text)] truncate">
+                        {insight.habitName}
+                      </span>
+                      <span
+                        className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${
+                          isNudge
+                            ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]'
+                            : 'bg-[var(--color-warning-light)] text-[var(--color-warning)]'
+                        }`}
+                      >
+                        {isNudge ? 'Momentum Nudge' : 'Needs Attention'}
+                      </span>
+                    </div>
                     <button
                       type="button"
-                      disabled={applyingHabitId === insight.habitId}
-                      onClick={() => handleApplyAiSuggestion(insight)}
-                      className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer disabled:opacity-50"
+                      onClick={() => handleDismissAiInsight(insight.habitId)}
+                      className="p-1 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-border)] transition-colors cursor-pointer"
+                      title="Dismiss"
+                      aria-label="Dismiss"
                     >
-                      {applyingHabitId === insight.habitId ? (
-                        'Applying…'
-                      ) : (
-                        <>
-                          <span>Apply Suggestion</span>
-                          <ArrowRight size={12} />
-                        </>
-                      )}
+                      <X size={14} />
                     </button>
-                  )}
+                  </div>
+
+                  {/* Risk summary */}
+                  <div className="flex items-start gap-2 text-xs text-[var(--color-text-secondary)]">
+                    {isNudge ? (
+                      <Sparkles size={14} className="text-[var(--color-primary)] shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertTriangle size={14} className="text-[var(--color-warning)] shrink-0 mt-0.5" />
+                    )}
+                    <p>{insight.riskSummary}</p>
+                  </div>
+
+                  {/* Concrete suggestion callout */}
+                  <div
+                    className={`rounded-[var(--radius-md)] p-3 border text-xs text-[var(--color-text)] leading-relaxed ${
+                      isNudge
+                        ? 'bg-[var(--color-primary-light)]/50 border-[var(--color-primary)]/20'
+                        : 'bg-[var(--color-warning-light)] border-[var(--color-warning)]/20'
+                    }`}
+                  >
+                    <p className="font-semibold text-[var(--color-text)] mb-0.5">
+                      {isNudge ? 'Momentum Reminder:' : 'Recommended Adjustment:'}
+                    </p>
+                    <p>{insight.suggestion}</p>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => handleDismissAiInsight(insight.habitId)}
+                      className="text-xs px-3 py-1.5 rounded-[var(--radius-md)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border)] transition-colors cursor-pointer"
+                    >
+                      Dismiss
+                    </button>
+                    {insight.suggestedChange && (
+                      <button
+                        type="button"
+                        disabled={applyingHabitId === insight.habitId}
+                        onClick={() => handleApplyAiSuggestion(insight)}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-[var(--radius-md)] bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        {applyingHabitId === insight.habitId ? (
+                          'Applying…'
+                        ) : (
+                          <>
+                            <span>Apply Suggestion</span>
+                            <ArrowRight size={12} />
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

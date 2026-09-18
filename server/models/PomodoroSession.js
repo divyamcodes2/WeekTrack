@@ -33,5 +33,6 @@ const pomodoroSessionSchema = new mongoose.Schema(
 // Index for date range + user queries
 pomodoroSessionSchema.index({ userId: 1, completedAt: -1 });
 pomodoroSessionSchema.index({ userId: 1, habitId: 1, completedAt: -1 });
+pomodoroSessionSchema.index({ userId: 1, type: 1, completedAt: -1 });
 
 module.exports = mongoose.model('PomodoroSession', pomodoroSessionSchema);

@@ -12,10 +12,10 @@ router.use(auth);
 router.post(
   '/',
   [
-    body('habitId').notEmpty().withMessage('habitId is required'),
+    body('habitId').isMongoId().withMessage('Valid habit ID is required'),
     body('date')
       .matches(/^\d{4}-\d{2}-\d{2}$/)
-      .withMessage('Date must be YYYY-MM-DD'),
+      .withMessage('Date must be in YYYY-MM-DD format'),
   ],
   validate,
   completionController.toggleCompletion
@@ -28,10 +28,10 @@ router.get('/', completionController.getCompletions);
 router.post(
   '/freeze',
   [
-    body('habitId').notEmpty().withMessage('habitId is required'),
+    body('habitId').isMongoId().withMessage('Valid habit ID is required'),
     body('date')
       .matches(/^\d{4}-\d{2}-\d{2}$/)
-      .withMessage('Date must be YYYY-MM-DD'),
+      .withMessage('Date must be in YYYY-MM-DD format'),
   ],
   validate,
   completionController.applyFreeze

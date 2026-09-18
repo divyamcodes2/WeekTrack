@@ -12,8 +12,16 @@ router.use(auth);
 router.post(
   '/',
   [
-    body('duration').isInt({ min: 1 }).withMessage('Duration must be at least 1 minute'),
-    body('type').isIn(['work', 'break']).withMessage('Type must be work or break'),
+    body('duration')
+      .isInt({ min: 1, max: 720 })
+      .withMessage('Duration must be between 1 and 720 minutes'),
+    body('type')
+      .isIn(['work', 'break'])
+      .withMessage('Type must be work or break'),
+    body('habitId')
+      .optional({ nullable: true })
+      .isMongoId()
+      .withMessage('Invalid habit ID format'),
   ],
   validate,
   pomodoroController.createSession
