@@ -7,6 +7,9 @@
 [![Gemini AI](https://img.shields.io/badge/Google%20Gemini-AI%20Coach-4285F4?logo=google&logoColor=white)](https://ai.google.dev/)
 [![Security](https://img.shields.io/badge/Security-AES--256--GCM-critical)](https://nodejs.org/api/crypto.html)
 
+> 🌐 **Live Web App:** [https://week-track.vercel.app](https://week-track.vercel.app)  
+> 🔗 **Live Backend API:** [https://weektrack.onrender.com](https://weektrack.onrender.com) (Health: [`/api/health`](https://weektrack.onrender.com/api/health))
+
 **WeekTrack** is an intelligent, full-stack habit tracking and personal productivity platform designed to turn daily ambitions into compounding streaks. It combines a 7-day visual grid, streak momentum counters, a linked Pomodoro focus timer, comprehensive analytics, a daily reflection journal, a GitHub-style consistency heatmap, and an **AI Coach powered by Google Gemini** that adapts to your actual completion pace.
 
 ---
@@ -312,7 +315,7 @@ npm run seed
 2. Set **Root Directory** to `client`.
 3. Framework Preset: **Vite**.
 4. Set Environment Variable:
-   * `VITE_API_URL` = `https://your-backend-api.onrender.com/api`
+   * `VITE_API_URL` = `https://weektrack.onrender.com/api`
 5. Deploy.
 
 ### Deploying Backend (Render)
@@ -326,7 +329,7 @@ npm run seed
    * `JWT_SECRET` = A strong random secret
    * `JWT_REFRESH_SECRET` = A strong random secret
    * `ENCRYPTION_SECRET` = A strong 32+ character random string
-   * `CLIENT_URL` = `https://your-frontend.vercel.app`
+   * `CLIENT_URL` = `https://week-track.vercel.app`
    * `NODE_ENV` = `production`
    * `PORT` = `5000` (Render handles port routing)
 7. Health Check Path: `/api/health`.
